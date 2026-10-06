@@ -7,7 +7,7 @@ const U = require('./util');
 
 const scrypt = promisify(crypto.scrypt);
 
-const COOKIE = 'vet_session';
+const COOKIE = 'petshop_session';
 const MAX_AGE = 7 * 24 * 3600; // la sesión dura 7 días
 const PROD = process.env.NODE_ENV === 'production';
 

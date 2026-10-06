@@ -1,8 +1,8 @@
 # Atajo opcional para Render ("Blueprint"). Si lo usás, Render carga esta configuración
-# y solo te pide los valores marcados como secretos.
+# y solo te pide los valores marcados como secretos (sync: false).
 services:
   - type: web
-    name: veterinaria
+    name: petshop
     runtime: node
     plan: free
     buildCommand: npm install
@@ -19,12 +19,6 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      # Adjuntos de estudios (Supabase Storage). Opcionales: sin ellas el sistema funciona, pero sin adjuntos.
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SUPABASE_BUCKET
-        value: estudios
-      - key: CLINIC_NAME
+      # Opcional: nombre del negocio que aparece en la pantalla y en los tickets.
+      - key: SHOP_NAME
         sync: false

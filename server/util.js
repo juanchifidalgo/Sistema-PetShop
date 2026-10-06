@@ -10,20 +10,25 @@ const bad = (message) => new HttpError(400, message);
 const HANDLED = Symbol('handled');
 
 const METHODS = ['Efectivo', 'Transferencia', 'Tarjeta de débito', 'Tarjeta de crédito'];
-// v2: se suman 'Pulguicidas' y 'Antiparasitarios' a las categorías de producto.
-const PROD_CATS = ['Medicamentos', 'Vacunas', 'Higiene', 'Pulguicidas', 'Antiparasitarios', 'Otros'];
-const SPECIES_OPTS = ['Perro', 'Gato', 'Ambos'];
-const SERV_CATS = ['Consultas', 'Vacunas', 'Cirugías', 'Otros'];
-// C7: ingresos y egresos tienen categorías separadas.
-const CASH_IN_CATS = ['Servicios', 'Venta de productos', 'Aporte de capital', 'Otros'];
-const CASH_OUT_CATS = ['Compra de stock', 'Alquiler y servicios', 'Sueldos', 'Retiro de caja', 'Impuestos', 'Otros'];
-// C5: motivos permitidos al ajustar stock a mano.
-const ADJUST_REASONS = ['Rotura', 'Vencimiento', 'Error de carga', 'Uso interno', 'Otro'];
-// v2: tipos de turno del calendario, con su color de bloque (coherente en cualquier paleta del sistema).
-const APPT_TYPES = ['consulta', 'vacuna', 'cirugia', 'otro'];
-// E3: duración habitual (en minutos) de cada tipo de turno.
-const APPT_DURATIONS = { consulta: 20, vacuna: 10, cirugia: 120, otro: 30 };
-const APPT_LABELS = { consulta: 'Consulta', vacuna: 'Vacuna', cirugia: 'Cirugía', otro: 'Otro' };
+// Categorías del catálogo del pet shop.
+const PROD_CATS = [
+  'Alimento balanceado', 'Snacks y premios', 'Accesorios', 'Juguetes', 'Higiene y cuidado',
+  'Salud (venta libre)', 'Camas y transporte', 'Acuario', 'Aves y roedores', 'Otros',
+];
+// Para qué animal es un producto (opcional, sirve para filtrar).
+const SPECIES_OPTS = ['Perro', 'Gato', 'Perro y gato', 'Otras mascotas'];
+// Unidad de venta: por unidad o suelto por kilo.
+const UNITS = ['u', 'kg'];
+const SERV_CATS = ['Baño', 'Peluquería', 'Otros'];
+const PET_SPECIES = ['Perro', 'Gato', 'Otro'];
+const PET_SIZES = ['Chico', 'Mediano', 'Grande', 'Gigante'];
+// Ingresos y egresos tienen categorías separadas. Las ventas entran solas como "Ventas".
+const CASH_IN_CATS = ['Ventas', 'Aporte de capital', 'Otros ingresos'];
+const CASH_OUT_CATS = ['Compra de mercadería', 'Alquiler y servicios', 'Sueldos', 'Impuestos', 'Insumos de peluquería', 'Retiro de caja', 'Otros'];
+// Motivos permitidos al ajustar stock a mano.
+const ADJUST_REASONS = ['Rotura', 'Vencimiento', 'Error de carga', 'Uso interno (peluquería)', 'Faltante', 'Otro'];
+// Estados de un turno de peluquería.
+const APPT_STATUS = ['reservado', 'en_curso', 'listo', 'entregado', 'no_vino', 'cancelado'];
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -49,6 +54,7 @@ function monthEnd(iso) {
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 const round2 = (x) => Math.round(x * 100) / 100;
+const round3 = (x) => Math.round(x * 1000) / 1000;
 
 /* ---------- validaciones ---------- */
 function reqStr(v, label, max) {
@@ -123,10 +129,26 @@ function reqInt(v, label, min, max) {
 function money(v, label) {
   return round2(reqNum(v, label, 0, 1e9));
 }
-/** Especie opcional de un producto o servicio de vacunas: solo se guarda si la categoría es Vacunas. */
-function optSpecies(v, category) {
-  if (category !== 'Vacunas' || v == null || v === '') return null;
-  return oneOf(v, SPECIES_OPTS, 'Especie');
+/** Valor opcional de una lista: '' o null = sin dato. */
+function optOneOf(v, list, label) {
+  if (v == null || v === '') return null;
+  return oneOf(v, list, label);
+}
+/**
+ * Cantidad de un producto según su unidad: por unidad, un entero; por kilo, hasta 3 decimales (gramos).
+ * `allowZero` para stock mínimo/inicial; `allowNeg` para ajustes.
+ */
+function qty(v, label, unit, o) {
+  o = o || {};
+  const n = reqNum(v, label, o.allowNeg ? -1e6 : 0, 1e6);
+  if (unit === 'kg') {
+    if (Math.abs(round3(n) - n) > 1e-9) throw bad(label + ': como máximo 3 decimales (gramos)');
+  } else if (!Number.isInteger(n)) {
+    throw bad(label + ' tiene que ser un número entero');
+  }
+  if (!o.allowZero && !o.allowNeg && n <= 0) throw bad(label + ' tiene que ser mayor a cero');
+  if (o.allowNeg && n === 0) throw bad(label + ' no puede ser cero');
+  return unit === 'kg' ? round3(n) : n;
 }
 /** Monto que tiene que ser mayor a cero (movimientos manuales de caja, compras de stock). */
 function moneyPos(v, label) {
@@ -224,8 +246,8 @@ function clientIp(req) {
 
 module.exports = {
   HttpError, bad, HANDLED,
-  METHODS, SPECIES_OPTS, PROD_CATS, SERV_CATS, CASH_IN_CATS, CASH_OUT_CATS, ADJUST_REASONS, APPT_TYPES, APPT_DURATIONS, APPT_LABELS,
-  TZ, todayAR, addDays, monthStart, monthEnd, round2,
-  reqStr, optStr, optPhone, optBarcode, reqDate, optDate, pastDate, optPastDate, reqTime, reqNum, reqInt, money, moneyPos, oneOf, optSpecies, idParam, checkEmail,
+  METHODS, SPECIES_OPTS, PROD_CATS, UNITS, SERV_CATS, PET_SPECIES, PET_SIZES, CASH_IN_CATS, CASH_OUT_CATS, ADJUST_REASONS, APPT_STATUS,
+  TZ, todayAR, addDays, monthStart, monthEnd, round2, round3,
+  reqStr, optStr, optPhone, optBarcode, reqDate, optDate, pastDate, optPastDate, reqTime, reqNum, reqInt, money, moneyPos, oneOf, optOneOf, qty, idParam, checkEmail,
   sendJson, readBody, readRaw, parseCookies, clientIp,
 };
