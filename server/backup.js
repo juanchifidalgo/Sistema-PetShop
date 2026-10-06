@@ -8,19 +8,30 @@ const U = require('./util');
 // No se incluyen los usuarios ni sus contraseñas.
 const TABLES = [
   ['suppliers', ['id', 'name', 'phone', 'email', 'description', 'created_at']],
-  ['products', ['id', 'name', 'brand', 'category', 'species', 'unit', 'stock', 'min_stock', 'price', 'cost', 'pack_kg', 'loose_id', 'supplier_id', 'barcode', 'expires_on', 'created_at']],
+  ['products', ['id', 'name', 'brand', 'category', 'species', 'unit', 'stock', 'min_stock', 'price', 'cost', 'pack_kg', 'loose_id', 'supplier_id', 'barcode', 'expires_on', 'is_gift', 'created_at']],
+  ['product_barcodes', ['code', 'product_id', 'created_at']],
   ['services', ['id', 'name', 'category', 'price', 'duration_min']],
   ['clients', ['id', 'first_name', 'last_name', 'phone', 'email', 'address', 'notes', 'created_at']],
   ['pets', ['id', 'client_id', 'name', 'species', 'breed', 'size', 'birth', 'notes', 'created_at']],
   ['cash_movements', ['id', 'on_date', 'kind', 'concept', 'category', 'method', 'amount', 'supplier_id', 'created_by', 'created_at']],
-  ['sales', ['id', 'on_date', 'client_id', 'pet_id', 'method', 'subtotal', 'discount', 'total', 'cost_total', 'note', 'cash_id', 'voided_at', 'void_reason', 'created_by', 'created_at']],
-  ['sale_items', ['id', 'sale_id', 'kind', 'product_id', 'service_id', 'name', 'category', 'unit', 'qty', 'unit_price', 'unit_cost', 'amount']],
-  ['stock_movements', ['id', 'product_id', 'product_name', 'on_date', 'qty', 'reason', 'unit_price', 'note', 'sale_id', 'supplier_id', 'cash_id', 'voided', 'created_at']],
-  ['appointments', ['id', 'pet_id', 'service_id', 'on_date', 'at_time', 'duration_min', 'status', 'notes', 'sale_id', 'created_at']],
+  ['sales', ['id', 'number', 'on_date', 'client_id', 'pet_id', 'method', 'subtotal', 'discount', 'total', 'cost_total', 'note', 'cash_id', 'voided_at', 'void_reason', 'created_by', 'created_at']],
+  ['sale_items', ['id', 'sale_id', 'kind', 'product_id', 'service_id', 'name', 'category', 'unit', 'qty', 'unit_price', 'list_price', 'price_reason', 'unit_cost', 'amount']],
+  ['sale_payments', ['id', 'sale_id', 'method', 'amount', 'cash_id']],
+  ['stock_movements', ['id', 'product_id', 'product_name', 'on_date', 'qty', 'reason', 'unit_price', 'note', 'sale_id', 'supplier_id', 'cash_id', 'voided', 'created_by', 'created_at']],
+  ['appointments', ['id', 'pet_id', 'service_id', 'on_date', 'at_time', 'duration_min', 'status', 'notes', 'staff', 'started_at', 'finished_at', 'sale_id', 'created_at']],
   ['cash_closings', ['id', 'on_date', 'expected', 'counted', 'difference', 'note', 'created_at']],
+  ['audit_log', ['id', 'at', 'user_id', 'user_name', 'action', 'entity', 'entity_id', 'before', 'after', 'reason']],
 ];
 // Columnas que apuntan a la misma tabla: se cargan después, para no depender del orden de las filas.
 const SELF_REFS = { products: ['loose_id'] };
+// Tablas sin columna "id" numérica (su clave es otra).
+const NO_ID = { product_barcodes: 'code' };
+// Tablas que no existían en copias anteriores: si faltan, se reconstruyen a partir del resto.
+const NEW_TABLES = new Set(['product_barcodes', 'sale_payments', 'audit_log']);
+// Columnas que apuntan a usuarios: los usuarios no viajan en las copias, así que si no existe queda vacío.
+const USER_COLS = new Set(['created_by', 'user_id']);
+// Valores por defecto para columnas que no existían en copias anteriores.
+const COL_DEFAULTS = { is_gift: false, price_reason: '', staff: '' };
 
 // Retención pensada para los 500 MB del plan gratuito de Supabase (las copias viven en la misma base).
 const KEEP_AUTO = 7;
@@ -29,7 +40,7 @@ const KEEP_MANUAL = 10;
 async function collect() {
   const out = {};
   for (const [table, cols] of TABLES) {
-    const r = await db.query('SELECT ' + cols.join(', ') + ' FROM ' + table + ' ORDER BY id');
+    const r = await db.query('SELECT ' + cols.join(', ') + ' FROM ' + table + ' ORDER BY ' + (NO_ID[table] || 'id'));
     out[table] = r.rows;
   }
   return out;
@@ -144,9 +155,11 @@ async function exportAll() {
 function validate(d) {
   if (!d || typeof d !== 'object') throw U.bad('La copia no es válida');
   for (const [table] of TABLES) {
+    if (d[table] === undefined && NEW_TABLES.has(table)) continue; // copia de una versión anterior
     if (!Array.isArray(d[table])) throw U.bad('La copia no es válida: falta la sección "' + table + '"');
+    const key = NO_ID[table];
     for (const row of d[table]) {
-      if (!row || typeof row !== 'object' || !Number.isInteger(row.id)) {
+      if (!row || typeof row !== 'object' || (key ? typeof row[key] !== 'string' : !Number.isInteger(row.id))) {
         throw U.bad('La copia no es válida: hay datos dañados en "' + table + '"');
       }
     }
@@ -170,7 +183,7 @@ async function restore(data, opts) {
       const users = new Set((await c.query('SELECT id FROM users')).rows.map((u) => u.id));
       for (const [table] of TABLES.slice().reverse()) await c.query('DELETE FROM ' + table);
       for (const [table, cols] of TABLES) {
-        const rows = data[table];
+        const rows = data[table] || [];
         const late = SELF_REFS[table] || [];
         for (let i = 0; i < rows.length; i += 200) {
           const chunk = rows.slice(i, i + 200);
@@ -182,8 +195,9 @@ async function restore(data, opts) {
                 cols
                   .map((col) => {
                     let v = late.includes(col) ? null : row[col];
-                    if (col === 'created_by' && !users.has(v)) v = null;
-                    params.push(v === undefined ? null : v);
+                    if (v === undefined) v = COL_DEFAULTS[col] !== undefined ? COL_DEFAULTS[col] : null;
+                    if (USER_COLS.has(col) && !users.has(v)) v = null;
+                    params.push(v);
                     return '$' + params.length;
                   })
                   .join(', ') +
@@ -197,11 +211,19 @@ async function restore(data, opts) {
             if (row[col] != null) await c.query('UPDATE ' + table + ' SET ' + col + ' = $1 WHERE id = $2', [row[col], row.id]);
           }
         }
-        await db.resetSequence(c, table);
+        if (!NO_ID[table]) await db.resetSequence(c, table);
       }
       // El teléfono normalizado no viaja en las copias: se recalcula.
       await c.query("UPDATE suppliers SET phone_norm = regexp_replace(phone, '\\D', '', 'g')");
       await c.query("UPDATE clients SET phone_norm = regexp_replace(phone, '\\D', '', 'g')");
+      // Copias anteriores a la numeración, al pago mixto y a los códigos múltiples: se completan.
+      await c.query('UPDATE sales SET number = id WHERE number IS NULL');
+      await c.query('UPDATE sale_items SET list_price = unit_price WHERE list_price IS NULL');
+      await c.query(
+        'INSERT INTO sale_payments (sale_id, method, amount, cash_id) SELECT s.id, s.method, s.total, s.cash_id FROM sales s WHERE NOT EXISTS (SELECT 1 FROM sale_payments p WHERE p.sale_id = s.id)'
+      );
+      await c.query('INSERT INTO product_barcodes (code, product_id) SELECT barcode, id FROM products WHERE barcode IS NOT NULL ON CONFLICT (code) DO NOTHING');
+      await c.query("INSERT INTO counters (name, value) SELECT 'sale', COALESCE(MAX(number), 0) FROM sales ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value");
     });
   } catch (e) {
     console.error('Falló la restauración:', e.message);

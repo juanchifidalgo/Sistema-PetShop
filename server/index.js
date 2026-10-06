@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PROD = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
@@ -16,6 +17,7 @@ const MIME = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 function checkEnv() {
@@ -78,7 +80,7 @@ function serveStatic(req, res, url) {
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'Content-Length': st.size,
-      'Cache-Control': pathname.startsWith('/vendor/') ? 'public, max-age=86400' : 'no-cache',
+      'Cache-Control': pathname.startsWith('/vendor/') || pathname.startsWith('/icons/') ? 'public, max-age=86400' : 'no-cache',
     });
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
@@ -115,9 +117,17 @@ const server = http.createServer(async (req, res) => {
   try {
     await api.dispatch(req, res, url);
   } catch (e) {
-    const status = e.status && e.status < 500 ? e.status : 500;
-    if (status === 500) console.error('Error interno en', req.method, url.pathname, '-', e.message);
-    if (!res.headersSent) U.sendJson(res, status, { error: status === 500 ? 'Ocurrió un error interno. Probá de nuevo.' : e.message });
+    const status = e.status ? e.status : 500;
+    const body = { error: e.message };
+    if (e.extra) Object.assign(body, e.extra);
+    if (status >= 500 && !e.extra) {
+      // Error inesperado: se registra con un código para encontrarlo en los Logs; al usuario no se le muestran detalles.
+      const ref = crypto.randomBytes(3).toString('hex').toUpperCase();
+      console.error('Error interno [' + ref + '] en', req.method, url.pathname, '-', e.stack || e.message);
+      body.error = 'Algo salió mal (código ' + ref + '). Probá de nuevo; si se repite, pasale este código a quien te ayuda con el sistema.';
+      body.ref = ref;
+    }
+    if (!res.headersSent) U.sendJson(res, status, body);
     else res.end();
   }
   console.log(req.method, url.pathname, res.statusCode, Date.now() - started + 'ms');
@@ -128,6 +138,9 @@ async function main() {
   await auth.ensureAdmin();
   backup.ensureDaily().catch((e) => console.error('Copia diaria:', e.message));
   setInterval(() => backup.ensureDaily().catch((e) => console.error('Copia diaria:', e.message)), 60 * 60 * 1000).unref();
+  // Informe semanal por email: se revisa cada hora mientras el servidor está despierto (en el plan gratuito de
+  // Render conviene además un cron externo que llame a /api/cron/weekly-report; ver README).
+  setInterval(() => api.weeklyTick().catch((e) => console.error('Informe semanal:', e.message)), 60 * 60 * 1000).unref();
   server.listen(PORT, '0.0.0.0', () => {
     console.log('Sistema del pet shop funcionando en el puerto ' + PORT + (PROD ? ' (modo producción)' : ' (modo prueba)'));
   });

@@ -194,3 +194,90 @@ CREATE TABLE IF NOT EXISTS backups (
   counts TEXT NOT NULL DEFAULT '{}',
   data TEXT NOT NULL
 );
+
+-- ============================================================
+-- Etapa 2 (auditoría de calidad). Todo es idempotente y no borra datos.
+-- ============================================================
+
+-- Configuración del negocio (una sola fila con un JSON: nombre, horario, medios de pago, informe semanal...).
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Registro de auditoría de acciones sensibles (precio manual, anulaciones, stock, caja, usuarios...).
+CREATE TABLE IF NOT EXISTS audit_log (
+  id SERIAL PRIMARY KEY,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_name TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  entity_id INTEGER,
+  before TEXT,
+  after TEXT,
+  reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS audit_at_idx ON audit_log(at);
+
+-- Numeración de comprobantes sin huecos: un contador que se incrementa DENTRO de la transacción de la venta
+-- (si la venta falla, el número no se consume). Las ventas que ya existían toman su id como número.
+CREATE TABLE IF NOT EXISTS counters (
+  name TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+);
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS number INTEGER;
+UPDATE sales SET number = id WHERE number IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS sales_number_idx ON sales(number);
+INSERT INTO counters (name, value) SELECT 'sale', COALESCE(MAX(number), 0) FROM sales ON CONFLICT (name) DO NOTHING;
+-- Idempotencia: la misma clave enviada dos veces (doble clic, reintento) no crea dos ventas.
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS idem_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS sales_idem_idx ON sales(idem_key) WHERE idem_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS sales_voided_date_idx ON sales(on_date) WHERE voided_at IS NULL;
+
+-- Precio de lista y motivo cuando el administrador cambia el precio de una línea.
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS list_price NUMERIC(12,2);
+UPDATE sale_items SET list_price = unit_price WHERE list_price IS NULL;
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_reason TEXT NOT NULL DEFAULT '';
+
+-- Pago mixto: una venta puede cobrarse con varias formas de pago (un ingreso en caja por cada una).
+CREATE TABLE IF NOT EXISTS sale_payments (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  method TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  cash_id INTEGER REFERENCES cash_movements(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS sale_payments_sale_idx ON sale_payments(sale_id);
+CREATE INDEX IF NOT EXISTS sale_payments_cash_idx ON sale_payments(cash_id);
+INSERT INTO sale_payments (sale_id, method, amount, cash_id)
+  SELECT s.id, s.method, s.total, s.cash_id FROM sales s WHERE NOT EXISTS (SELECT 1 FROM sale_payments p WHERE p.sale_id = s.id);
+
+-- Productos de regalo/promoción (los únicos que pueden tener precio $ 0).
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_gift BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS sale_items_kind_idx ON sale_items(kind, product_id);
+
+-- Varios códigos de barras por producto (código único en todo el sistema). Se copian los que ya existían.
+CREATE TABLE IF NOT EXISTS product_barcodes (
+  code TEXT PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS product_barcodes_product_idx ON product_barcodes(product_id);
+INSERT INTO product_barcodes (code, product_id) SELECT barcode, id FROM products WHERE barcode IS NOT NULL ON CONFLICT (code) DO NOTHING;
+
+-- Agenda: quién atiende (peluquero) y cuándo empezó/terminó de verdad (para comparar con la duración estimada).
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS staff TEXT NOT NULL DEFAULT '';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
+
+-- Envíos del informe semanal por email (con el error, si lo hubo).
+CREATE TABLE IF NOT EXISTS report_log (
+  id SERIAL PRIMARY KEY,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  week TEXT NOT NULL,
+  recipients TEXT NOT NULL DEFAULT '',
+  ok BOOLEAN NOT NULL,
+  error TEXT NOT NULL DEFAULT ''
+);
