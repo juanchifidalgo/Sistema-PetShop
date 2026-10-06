@@ -40,8 +40,9 @@ function handle(sql, params) {
     }
   }
   // Como en PostgreSQL, un COUNT/SUM sin GROUP BY siempre devuelve una fila (con ceros si no hay datos).
-  if (/^\s*SELECT/i.test(sql) && /\b(COUNT|SUM)\(/i.test(sql) && !/GROUP BY/i.test(sql)) {
-    return { rows: [new Proxy({}, { get: (t, k) => (k === 'then' ? undefined : 0) })], rowCount: 1 };
+  if (/^\s*SELECT/i.test(sql) && /\b(COUNT|SUM|MIN|MAX)\(/i.test(sql) && !/GROUP BY/i.test(sql)) {
+    // MIN/MAX de fechas sin datos dan NULL; las sumas y conteos, 0.
+    return { rows: [new Proxy({}, { get: (t, k) => (k === 'then' ? undefined : k === 'd' ? null : 0) })], rowCount: 1 };
   }
   return { rows: [], rowCount: 0 };
 }

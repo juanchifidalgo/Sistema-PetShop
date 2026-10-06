@@ -234,7 +234,7 @@ module.exports = function (H) {
       from: R.from, to: R.to, lostDays,
       frequent: freq.rows.map((x) => ({ id: x.id, name: x.name, phone: x.phone, count: Number(x.n), total: U.round2(Number(x.total)), avg: U.round2(Number(x.total) / Number(x.n)), last: x.last })),
       lost,
-      newVsReturning: { new: Number(nv.rows[0].nuevos), returning: Number(nv.rows[0].recurrentes) },
+      newVsReturning: { new: Number((nv.rows[0] || {}).nuevos || 0), returning: Number((nv.rows[0] || {}).recurrentes || 0) },
     };
   }
   add('GET', '/api/summary/clients', async (ctx) => clientsReport(ctx.query));
