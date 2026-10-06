@@ -5,7 +5,7 @@ services:
     name: petshop
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
@@ -19,6 +19,15 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      # Opcional: nombre del negocio que aparece en la pantalla y en los tickets.
+      # Opcional: nombre del negocio (también se puede cambiar en Configuración).
       - key: SHOP_NAME
         sync: false
+      # Opcional: informe semanal por email (resend o brevo). Sin estas, el informe queda desactivado.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true

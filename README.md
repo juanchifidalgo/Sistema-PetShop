@@ -8,18 +8,20 @@ Sistema pensado para **el dueño del pet shop**: el stock de lo que vendés, las
 
 | Pantalla | Para qué sirve | Quién la ve |
 |---|---|---|
-| **Resumen** | Ventas y ganancia de hoy y del mes, comparación con el mes anterior, efectivo en caja, lo más vendido, poco stock, productos por vencer y turnos del día | Dueño |
-| **Vender** | Punto de venta: buscás o escaneás productos, sumás servicios, descuento, cliente (opcional), forma de pago → **Cobrar**. Descuenta el stock, registra el ingreso en caja e imprime un ticket | Todos |
-| **Ventas** | Historial de ventas con su ganancia, ticket para reimprimir y **anular venta** (devuelve el stock y saca el ingreso de la caja) | Todos (el empleado solo ve las de hoy, sin ganancias) |
-| **Stock** | Catálogo con categorías, marca, código de barras, venta por unidad o **suelto por kilo**, costo, margen, vencimiento, botón **Vender**, "llegó mercadería", ajustes, historial, **abrir bolsa para vender suelto**, **actualizar precios por %** y pestaña **Para pedir** (reposición por proveedor) | Todos (costos y cambios: solo el dueño) |
+| **Resumen** | Todos los números en una sola pantalla, con **selector de período** (hoy, ayer, 7 días, este mes, mes anterior o un rango). Pestañas: **General** (vendido, ganancia y margen, ticket promedio, ventas, efectivo en caja, gastos, evolución, mes a mes, lo más vendido, categorías, medios de pago, comparación con el mes anterior y el año pasado, horarios y días pico, avisos), **Productos** (rentabilidad por producto, marca o categoría), **Clientes** (frecuentes, perdidos con botón de WhatsApp, nuevos vs. recurrentes), **Personal** (rendimiento de cada peluquero) y **Proyección** (cómo cierra el mes y punto de equilibrio) | Todos (el empleado ve ventas y cantidades, sin costos ni ganancias) |
+| **Vender** | Punto de venta: buscás o escaneás productos (cámara o lector USB), sumás servicios, cantidades con − / + (con tope de stock), descuento, cliente (opcional), forma de pago o **pago mixto** → **Cobrar**. Atajos: F2 buscar, F4 cobrar, Esc vaciar. Imprime ticket de 58 u 80 mm | Todos (cambiar un precio: solo el dueño y con motivo) |
+| **Ventas** | Historial con número correlativo, búsqueda, ganancia, ticket para reimprimir y **anular venta** con motivo obligatorio (devuelve el stock y saca el ingreso de la caja) | Todos (el empleado solo ve las de hoy, sin ganancias) |
+| **Stock** | Catálogo con categorías, marca, varios códigos de barras, venta por unidad o **suelto por kilo**, costo, margen, vencimiento, regalo/promoción, botón **Vender**, "llegó mercadería", **ingreso con escáner**, ajustes, historial, **abrir bolsa**, **actualizar precios por %** y **Para pedir** (pedido por proveedor para copiar o mandar por WhatsApp) | Todos (costos y cambios: solo el dueño) |
 | **Servicios** | Precios de baño y peluquería (con duración) | Todos (editar: dueño) |
-| **Agenda** | Turnos de peluquería por mascota, con estado (reservado, en curso, listo para retirar, entregado, no vino) y botón **Cobrar** | Todos |
-| **Clientes** | Contacto, mascotas (especie, raza, tamaño, notas de peluquería), compras y turnos | Todos (borrar: dueño) |
+| **Agenda** | Turnos por mascota y **peluquero**, vista Día en grilla horaria, Semana y Mes. Avisa superposiciones, fuera de horario y fechas pasadas. Estados y botón **Cobrar** | Todos |
+| **Clientes** | Contacto, mascotas (especie, raza, tamaño, notas de peluquería), compras, turnos y WhatsApp | Todos (borrar: dueño) |
 | **Proveedores** | Contacto, productos que te vende y lo que le pagaste | Todos (editar: dueño) |
 | **Caja** | Ingresos y egresos con forma de pago, efectivo que debería haber, **cierre de caja diario** y exportación a Excel (CSV) | Dueño |
-| **Reportes** | Mes a mes (ventas, costo, ganancia bruta, gastos, resultado), por categoría, por producto (ganancia y cuánto te dura el stock), servicios y ventas por empleado | Dueño |
-| **Copias de seguridad** | Copia automática diaria, descarga a tu computadora y espacio usado de la base | Dueño |
-| **Usuarios** | Dueño/administrador y empleados | Dueño |
+| **Copias de seguridad** | Copia automática diaria, descarga comprimida a tu computadora y espacio usado de la base | Dueño |
+| **Usuarios y actividad** | Dueño/administrador y empleados, y el **registro de actividad** (cambios de precio, anulaciones, stock, caja, usuarios) | Dueño |
+| **Configuración** | Nombre, dirección y ticket; horario comercial; medios de pago; gastos fijos; umbrales; **informe semanal por email** | Dueño |
+
+Se puede **instalar como app** en el celular o la computadora (en Chrome: menú ⋮ → «Instalar app» / «Agregar a pantalla principal»).
 
 Vas a usar tres servicios gratuitos:
 
@@ -70,7 +72,8 @@ El código ya está en el repositorio `Sistema-PetShop`. Render lee la rama que 
 | `ADMIN_EMAIL` | Tu email (va a ser tu usuario para ingresar) |
 | `ADMIN_PASSWORD` | La contraseña con la que vas a ingresar (mínimo 8 caracteres) |
 | `NODE_ENV` | `production` |
-| `SHOP_NAME` | (opcional) El nombre de tu negocio: aparece en la pantalla y en los tickets |
+| `SHOP_NAME` | (opcional) El nombre de tu negocio. También se cambia después en **Configuración** |
+| `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM`, `CRON_SECRET` | (opcionales) Para el informe semanal por email: ver más abajo |
 
 5. En **Advanced** poné **Health Check Path:** `/healthz`.
 6. Tocá **Create Web Service** y esperá. Cuando diga *Live*, Render te muestra la dirección de tu sistema (algo como `https://petshop.onrender.com`).
@@ -91,21 +94,47 @@ El código ya está en el repositorio `Sistema-PetShop`. Render lee la rama que 
 
 ## El día a día
 
-- **Vender:** pantalla *Vender* (o botón *Vender* en cada producto del Stock). Con un **lector de código de barras USB** solo pasás el producto: se suma solo a la venta. Con el celular podés usar **📷 Escanear código** (hace falta abrir el sistema con https, como en Render).
-- **Llegó mercadería:** en *Stock*, botón **+** del producto (o *Ingresar con escáner*). Suma el stock, actualiza el costo y registra el gasto en caja.
-- **Qué pedir:** *Stock → Para pedir* te arma el pedido por proveedor; con **Copiar pedido** lo pegás en WhatsApp o en un mail.
-- **Peluquería:** agendá el turno en *Agenda*; cuando el perro está listo, tocá el turno → **Cobrar**.
+- **Vender:** pantalla *Vender* (o botón *Vender* en cada producto del Stock). Con un **lector de código de barras USB** solo pasás el producto: se suma solo a la venta. Con el celular usá **📷 Escanear con la cámara** (hace falta abrir el sistema con https, como en Render). Detalle y prueba paso a paso: [`docs/escaner.md`](docs/escaner.md).
+- **Llegó mercadería:** en *Stock*, botón **+** del producto o **📷 Ingresar con escáner** (modo continuo). Suma el stock, actualiza el costo y, si querés, registra el gasto en caja.
+- **Qué pedir:** *Stock → Para pedir* te arma el pedido por proveedor; **Copiar pedido** o **Enviar por WhatsApp**.
+- **Peluquería:** agendá el turno en *Agenda* (con quién lo atiende); cuando está listo, tocá el turno → **Listo para retirar** → **Cobrar**.
 - **Fin del día:** *Caja → Cierre de caja*: contás la plata, la escribís y el sistema te dice si hay diferencia.
 - **Inflación:** *Stock → % Actualizar precios* sube los precios de una categoría, marca o proveedor de una vez, con redondeo.
+- **Cambiar un precio en una venta:** solo el dueño, escribiendo el motivo. Queda en *Usuarios y actividad → Actividad*.
+
+## Informe semanal por email (opcional)
+
+Todos los lunes (o el día que elijas) te llega un resumen de la semana: vendido, ganancia, comparación, lo más vendido, poco stock, vencimientos, clientes que dejaron de venir y turnos «No vino».
+
+1. Creá una cuenta gratuita en **Resend** (resend.com) o **Brevo** (brevo.com) y verificá tu email o dominio como remitente.
+2. Copiá la **API key**.
+3. En Render → tu servicio → **Environment**, agregá:
+   - `EMAIL_PROVIDER` = `resend` o `brevo`
+   - `EMAIL_API_KEY` = la API key
+   - `EMAIL_FROM` = `Mi Pet Shop <avisos@tudominio.com>` (el remitente verificado)
+4. En el sistema: **Configuración → Informe semanal**: activalo, elegí día, hora y destinatarios, y tocá **Enviarme el informe ahora** para probarlo. Abajo ves los envíos y, si falló alguno, el motivo.
+5. **Importante (plan gratuito):** Render se duerme cuando nadie lo usa, y dormido no puede mandar el informe. Para que llegue igual, creá una tarea gratuita en **cron-job.org** que todos los días a la hora elegida haga un **POST** a `https://TU-SISTEMA.onrender.com/api/cron/weekly-report` con el encabezado `X-Cron-Secret` igual a la variable `CRON_SECRET` de Render (si usaste el Blueprint, Render la genera sola; si no, creala con un texto largo al azar). El sistema envía una sola vez por semana, aunque lo llamen todos los días.
+
+Si no cargás estas variables, la función queda desactivada y el sistema funciona igual.
 
 ## Copias de seguridad (leer con atención)
 
 La base de datos gratuita **no incluye copias de seguridad propias**. Por eso el sistema:
 
 - Hace **una copia automática por día**, guardada dentro de la misma base (se conservan las últimas 7). Sirve si borrás algo sin querer.
-- Permite **descargar una copia a un archivo** (*Copias de seguridad → Descargar copia a mi computadora*). Esto es lo que te protege de verdad si se perdiera la base.
+- Permite **descargar una copia** (*Copias de seguridad → Descargar copia comprimida*, un archivo `.json.gz` liviano; también en JSON). Esto es lo que te protege de verdad si se perdiera la base.
 
-**Hábito recomendado: descargá una copia por lo menos una vez por semana.** El sistema te avisa a la izquierda si pasaron más de 7 días.
+**Hábito recomendado: descargá una copia por lo menos una vez por semana.** El sistema te avisa en la barra lateral y en el Resumen si pasaron más de 7 días.
+
+### Prueba de restauración (una vez por mes, 10 minutos)
+
+Una copia que nunca se probó no es una copia. Para comprobar que las tuyas sirven, sin tocar tus datos reales:
+
+1. Descargá la copia comprimida del día.
+2. Creá un **segundo proyecto gratuito en Supabase** (por ejemplo `petshop-prueba`) y un **segundo servicio en Render** apuntando a esa base (mismas variables, otro `DATABASE_URL`).
+3. Entrá al sistema de prueba → *Copias de seguridad* → **Cargar desde archivo** → elegí la copia → confirmá.
+4. Revisá que coincidan la cantidad de productos, el stock de 3 productos al azar, las ventas del último día y el total del mes en *Resumen*.
+5. Listo: borrá el servicio y el proyecto de prueba.
 
 ## Cosas que tenés que saber del plan gratuito
 
@@ -115,21 +144,26 @@ La base de datos gratuita **no incluye copias de seguridad propias**. Por eso el
 
 ## Seguridad
 
-- Las contraseñas se guardan cifradas. Las sesiones duran 7 días y se cierran solas si cambiás la contraseña.
+- Las contraseñas se guardan cifradas. Las sesiones duran 7 días, se cierran solas si cambiás la contraseña y viajan en una cookie `HttpOnly`, `Secure` y `SameSite=Strict` (protección contra CSRF, sumada al control de origen).
 - Después de 5 intentos fallidos de ingreso, ese usuario se bloquea 15 minutos.
-- Toda la comunicación va por HTTPS.
+- Los permisos (dueño / empleado) se controlan **en el servidor**: aunque alguien llame a la API directamente, un empleado no puede ver costos, caja, copias ni usuarios, cambiar precios ni anular ventas. Todo cambio sensible queda en el registro de actividad.
+- Toda la comunicación va por HTTPS. Las consultas a la base son parametrizadas (un texto como `O'Brien` o `select` se guarda tal cual, sin riesgo).
+- Si algo falla del lado del servidor, la pantalla muestra «Algo salió mal (código ABC123)»: con ese código se encuentra el detalle en los Logs de Render.
 - El ticket que imprime el sistema es un **comprobante interno, no una factura**: la facturación electrónica (ARCA/AFIP) se sigue haciendo por fuera.
 - Guardás nombres y teléfonos de tus clientes: conviene tener en cuenta la ley argentina de protección de datos personales.
 
 ## Si algo no anda
 
 - **Render dice "Deploy failed" o la página no abre:** Render → tu servicio → **Logs**. Lo más común: falta `DATABASE_URL` o `SESSION_SECRET` (o es muy corto), la contraseña de la base tiene símbolos, o se usó la conexión directa en vez del *Session pooler*.
-- **"Email o contraseña incorrectos" con tu usuario:** revisá `ADMIN_EMAIL` y `ADMIN_PASSWORD` en Render.
+- **«El email o la contraseña no son correctos» con tu usuario:** revisá `ADMIN_EMAIL` y `ADMIN_PASSWORD` en Render.
 - **Te olvidaste la contraseña:** otro administrador puede cambiarla desde **Usuarios**.
+- **«Algo salió mal (código …)»:** buscá ese código en los Logs de Render.
 
 ## Para quien lo mantenga (técnico)
 
-- Node 18 o superior. Única dependencia: `pg`. Sin frameworks: servidor HTTP propio en `server/`, página estática en `public/`. Ver `CONTEXTO-IA.md`.
-- Las tablas están en `db/schema.sql` y se crean solas al iniciar (es seguro correrlo varias veces).
-- Probarlo en una computadora: copiar `.env.example` como `.env`, cargar las variables (con `DATABASE_SSL=false` si la base es local) y ejecutar `node --env-file=.env server/index.js` (Node 20.6 o superior).
-- El lector de códigos usa la librería ZXing (licencia MIT), guardada en `public/vendor/`.
+- Node 18 o superior. Única dependencia: `pg`. Sin frameworks: servidor HTTP propio en `server/` (rutas en `server/routes/`, reglas de negocio puras en `server/logic.js`), página estática en `public/`. Ver `CONTEXTO-IA.md`.
+- Las tablas están en `db/schema.sql` y se crean y actualizan solas al iniciar (migraciones idempotentes, sin borrar datos).
+- **Tests:** `npm test` (usa `node:test`, incluido en Node; no instala nada). Prueban las reglas de negocio, la tabla de permisos por ruta, ventas y agenda contra la API real con una base simulada en memoria, y la coherencia entre la pantalla y el servidor.
+- **Demo sin base de datos:** `npm run demo` levanta el sistema en `http://localhost:3999` con datos de prueba "QA" (`?rol=empleado` para ver la vista del empleado, `?rol=dueno` para volver). No guarda nada.
+- Probarlo con una base real: copiar `.env.example` como `.env`, cargar las variables (con `DATABASE_SSL=false` si la base es local) y ejecutar `node --env-file=.env server/index.js` (Node 20.6 o superior).
+- Íconos de la app: `npm run iconos` los regenera en `public/icons/`. El lector de códigos usa ZXing (licencia MIT), en `public/vendor/`.
